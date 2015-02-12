@@ -68,7 +68,7 @@ Key scribe_instance::uri_mapping(const uri &group_uri)
     string grp = group_uri.user_information_and_host ();
     string prt = group_uri.port ();
     uint32_t prti = 0;
-    std::mutex::lock_guard<std::mutex> guard (m_map_mutex);
+    std::lock_guard<std::mutex> guard (m_map_mutex);
     key_map_t::iterator it;
     if (!prt.empty ()) {
         it = m_key_cache.find(sch+"://"+grp+":"+prt);
@@ -104,7 +104,7 @@ uri scribe_instance::key_mapping (const Key &k, const uint32_t &port)
 
     uri_map_t::iterator it;
     {
-        std::mutex::lock_guard<std::mutex> guard (m_map_mutex);
+        std::lock_guard<std::mutex> guard (m_map_mutex);
         it = m_uri_cache.find (kvec);
         if (it != m_uri_cache.end ()) {
             return (it->second);
@@ -114,7 +114,7 @@ uri scribe_instance::key_mapping (const Key &k, const uint32_t &port)
         kvec.pop_back();
         string tmp_str;
         {
-            std::mutex::lock_guard<std::mutex> guard (m_map_mutex);
+            std::lock_guard<std::mutex> guard (m_map_mutex);
             it = m_uri_cache.find(kvec);
             if (it != m_uri_cache.end()) {
                 std::stringstream stream;
@@ -138,7 +138,7 @@ void scribe_instance::maintenance ()
         group_map_t::iterator it;
         set<uri> j_groups;
         { // lock scope
-            std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+            std::lock_guard<std::mutex> guard (m_grp_mutex);
             for (it = m_groups.begin(); it != m_groups.end(); ++it) {
                 children_map_t& children = it->second.get_children();
                 children_map_t::iterator cit;
@@ -226,7 +226,7 @@ void scribe_instance::deliver_create (Key*, Message *msg)
     }
 
     if (!group_uri.empty()) {
-        std::mutex::lock_guard<std::mutex> guard (m_map_mutex);
+        std::lock_guard<std::mutex> guard (m_map_mutex);
         m_groups.insert(pair<Key, scribe_group>(msg->src, scribe_group(group_uri)));
         uri *event_uri = new hamcast::uri(group_uri);
         m_event_cb(m_handle, static_cast<int>(hamcast::new_source_event), event_uri, NULL);
@@ -270,7 +270,7 @@ void scribe_instance::deliver_join (Key*, Message *msg)
     group_map_t::iterator it;
     ChimeraHost *host = host_decode(m_state, msg->payload);
     { // scope for lock
-        std::mutex::lock_guard<std::mutex> guard(m_grp_mutex);
+        std::lock_guard<std::mutex> guard(m_grp_mutex);
         it = m_groups.find (msg->src);
         if (it == m_groups.end()) {
             HC_LOG_INFO ("Group not found, create!");
@@ -308,7 +308,7 @@ void scribe_instance::deliver_leave (Key*, Message *msg)
     group_map_t::iterator it;
     scribe_group* group = NULL;
     { // scope for lock
-        std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+        std::lock_guard<std::mutex> guard (m_grp_mutex);
         it = m_groups.find (msg->src);
         if (it == m_groups.end()) {
             HC_LOG_WARN("No such group to leave!");
@@ -424,7 +424,7 @@ void scribe_instance::deliver_rp_reply (Key*, Message *msg)
     }
     ChimeraHost *host = host_decode(m_state, msg->payload);
     if (host != NULL) {
-        std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+        std::lock_guard<std::mutex> guard (m_grp_mutex);
         group_map_t::iterator it = m_groups.find (msg->src);
         if (it == m_groups.end()) {
             HC_LOG_INFO ("Unknown group, forget about RP.");
@@ -446,7 +446,7 @@ void scribe_instance::deliver_parent (Key*, Message *msg)
     }
     ChimeraHost *host = host_decode(m_state, msg->payload);
 
-    std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+    std::lock_guard<std::mutex> guard (m_grp_mutex);
     group_map_t::iterator it = m_groups.find (msg->src);
     if (it != m_groups.end() && !key_equal(m_mykey, host->key)) {
         HC_LOG_INFO ("set parent");
@@ -500,7 +500,7 @@ int scribe_instance::join (const uri &group_uri)
     ChimeraGlobal* chglo = (ChimeraGlobal*) m_state->chimera;
     group_map_t::iterator  it;
     {
-        std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+        std::lock_guard<std::mutex> guard (m_grp_mutex);
         it = m_groups.find(group_key);
         if (it != m_groups.end()) {
             scribe_group &group = it->second;
@@ -548,7 +548,7 @@ int scribe_instance::leave (const uri &group_uri)
         if (it != m_groups.end()) {
             scribe_group &group = it->second;
             {
-                std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+                std::lock_guard<std::mutex> guard (m_grp_mutex);
                 group.del_child(m_mykey);
             }
             if (group.get_children().size() == 0) {
@@ -594,7 +594,7 @@ int scribe_instance::send (const uri &group_uri,
     Message* msg;
     ChimeraHost* rp = NULL;
     {// mutex locked (CASE A/B)}
-        std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+        std::lock_guard<std::mutex> guard (m_grp_mutex);
         group_map_t::iterator it = m_groups.find(group_key);
         if (it != m_groups.end()) {
             rp = it->second.get_rp();
@@ -664,7 +664,7 @@ void scribe_instance::group_set (vector< pair<uri,int> > &result)
     group_map_t::iterator it;
     group_map_t groups;
     {
-        std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+        std::lock_guard<std::mutex> guard (m_grp_mutex);
         groups = m_groups;
     }
 
@@ -696,7 +696,7 @@ void scribe_instance::parent_set(vector<uri> &result, const hamcast::uri &group_
 {
     HC_LOG_TRACE("");
     Key group_key = uri_mapping(group_uri);
-    std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+    std::lock_guard<std::mutex> guard (m_grp_mutex);
     group_map_t::iterator it = m_groups.find(group_key);
     if (it != m_groups.end()) {
         ChimeraHost *parent = it->second.get_parent();
@@ -715,7 +715,7 @@ void scribe_instance::children_set (vector<uri> &result, const uri &group_uri)
 {
     HC_LOG_TRACE("CHILDREN_SET");
     Key group_key = uri_mapping(group_uri);
-    std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+    std::lock_guard<std::mutex> guard (m_grp_mutex);
     group_map_t::iterator it = m_groups.find(group_key);
     if (it != m_groups.end()) {
         scribe_group& group = it->second;
@@ -737,7 +737,7 @@ int scribe_instance::designated_host (const hamcast::uri &group_uri)
 {
     HC_LOG_TRACE("");
     Key group_key = uri_mapping (group_uri);
-    std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+    std::lock_guard<std::mutex> guard (m_grp_mutex);
     group_map_t::iterator it = m_groups.find(group_key);
     int ret = 0;    /* 0=false, 1=true */
     if (it != m_groups.end()){
@@ -789,7 +789,7 @@ void scribe_instance::forward_join (Key*, Message *msg, ChimeraHost *nextHost)
     ChimeraGlobal* chglo = (ChimeraGlobal*)m_state->chimera;
     host_encode (msg->payload, HOST_CODED_SIZE, chglo->me);
     { // scope for lock
-        std::mutex::lock_guard<std::mutex> guard (m_grp_mutex);
+        std::lock_guard<std::mutex> guard (m_grp_mutex);
         it = m_groups.find (msg->src);
         if (it == m_groups.end()) { //unknown group, create it
             HC_LOG_INFO ("Group not found, create!");
